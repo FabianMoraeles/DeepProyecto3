@@ -21,6 +21,7 @@ class ProviderTests(unittest.TestCase):
         with patch.dict(os.environ,{'ANTHROPIC_API_KEY':'test-only','DATOCLARO_PRICES_JSON':'{"test-model":{"input":1,"output":2}}'}), patch('anthropic.Anthropic',return_value=client):
             output=complete('system','prompt',Config(model='test-model'))
             self.assertAlmostEqual(output['cost_usd'],0.00005)
+            self.assertNotIn('temperature', client.messages.create.call_args.kwargs)
             client.messages.count_tokens.return_value=SimpleNamespace(input_tokens=8001)
             with self.assertRaises(ProviderError): complete('system','prompt',Config())
             self.assertEqual(client.messages.create.call_count,1)

@@ -6,3 +6,6 @@
 *.sqlite binary
 *.sqlite-shm binary
 *.sqlite-wal binary
+data/databases/card_games/card_games.sqlite filter=lfs diff=lfs merge=lfs -text
+data/databases/codebase_community/codebase_community.sqlite filter=lfs diff=lfs merge=lfs -text
+data/databases/european_football_2/european_football_2.sqlite filter=lfs diff=lfs merge=lfs -text

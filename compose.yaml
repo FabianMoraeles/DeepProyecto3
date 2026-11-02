@@ -1,0 +1,10 @@
+services:
+  datoclaro:
+    build: .
+    ports:
+      - "127.0.0.1:8501:8501"
+    env_file: .env
+    volumes:
+      - ./data/databases:/app/data/databases:ro
+      - ./artifacts:/app/artifacts
+    restart: unless-stopped

@@ -1,0 +1,8 @@
+# Los splits y el manifiesto guardan hashes SHA-256 de estos archivos:
+# deben conservar LF también en Windows (core.autocrlf=true).
+*.jsonl text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.sqlite binary
+*.sqlite-shm binary
+*.sqlite-wal binary

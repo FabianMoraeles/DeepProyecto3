@@ -19,8 +19,9 @@ def complete(system, prompt, config):
             count = client.messages.count_tokens(model=config.model, system=system, messages=[{'role':'user','content':prompt}])
             if count.input_tokens > 8000:
                 raise ProviderError('El contexto excede 8,000 tokens; reduce tablas o ejemplos.')
+            # claude-haiku-5-5 rechaza `temperature` (deprecado): se usa el muestreo por defecto.
             response = client.messages.create(model=config.model, max_tokens=config.max_tokens,
-                temperature=0, system=system, messages=[{'role': 'user', 'content': prompt}])
+                system=system, messages=[{'role': 'user', 'content': prompt}])
             text = ''.join(b.text for b in response.content if b.type == 'text')
             if response.stop_reason == 'max_tokens':
                 raise ProviderError('La respuesta del modelo excedió el límite de salida; acota la pregunta.')

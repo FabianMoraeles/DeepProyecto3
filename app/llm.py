@@ -40,7 +40,8 @@ def complete(system, prompt, config):
         if url.scheme not in ('http', 'https') or not url.hostname or url.username:
             raise ProviderError('OLLAMA_HOST inválido')
         payload = {'model': config.model, 'stream': False, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': prompt}],
-                   'options': {'temperature': 0, 'num_predict': config.max_tokens, 'num_ctx': 8192}}
+                   # El modelo local no razona: basta el tope anterior y no desborda num_ctx.
+                   'options': {'temperature': 0, 'num_predict': min(config.max_tokens, 1500), 'num_ctx': 8192}}
         if config.structured:
             payload['format'] = 'json'
         if len((system+prompt).encode('utf-8')) > 6500:

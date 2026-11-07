@@ -14,7 +14,9 @@ class Config:
     clarify: bool = True
     full_schema: bool = False
     timeout: float = 45
-    max_tokens: int = 1500
+    # claude-haiku-5-5 razona por defecto y ese razonamiento cuenta en max_tokens:
+    # con 1500 las preguntas compuestas se cortaban antes de devolver el SQL.
+    max_tokens: int = 16000
 
     @classmethod
     def from_env(cls):

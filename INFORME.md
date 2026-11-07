@@ -1,11 +1,14 @@
 # DatoClaro: preguntas en español convertidas en consultas verificables
 
 **CC3092 Deep Learning y Sistemas Inteligentes · Proyecto 3: Casos de Uso de LLM**
-**Integrantes:** ⚠️ PENDIENTE (nombres y carnés)
+**Integrantes:** 
+Luis Padilla 26226
+Fernando Ruiz 23065
+Fabian Morales 23267
 **Fecha de entrega:** 6 de noviembre de 2026
 **Repositorio:** https://github.com/FabianMoraeles/DeepProyecto3
 
-> Las marcas **⚠️ PENDIENTE** señalan datos que no están en el repositorio (resultados de las corridas con Claude u Ollama, capturas, nombres). El resto de cifras proviene de corridas reproducibles descritas en la sección 2.9.
+> Las cifras de los modelos provienen de las corridas del 2 de noviembre de 2026 sobre la partición dev (detalle en `RESULTADOS_EVALUACION.md`). Las marcas **⚠️ PENDIENTE** señalan lo que falta completar a mano (nombres y capturas).
 
 ---
 
@@ -24,7 +27,7 @@ Traducir lenguaje natural a SQL exige entender la intención de la pregunta (*«
 | Alternativa | Por qué no basta |
 |---|---|
 | Plantillas o formularios con filtros fijos | Solo cubren las preguntas previstas; cada pregunta nueva requiere programar. |
-| Búsqueda de la consulta más parecida (TF-IDF sobre preguntas ya resueltas) | Implementada como **baseline B0**. Reutiliza SQL de otra pregunta y casi nunca acierta: **1.3 % de exactitud** en el conjunto de prueba (sección 2.4). |
+| Búsqueda de la consulta más parecida (TF-IDF sobre preguntas ya resueltas) | Implementada como **baseline B0**. Reutiliza SQL de otra pregunta y casi nunca acierta: **0 %** en dev y **0.9 %** en test (sección 2.4). El LLM más fuerte llega a **45.1 %** en dev. |
 | Chat LLM sin acceso a la base | Responde con texto probable, no con datos verdaderos. |
 
 El LLM solo **genera la consulta**; el número que ve el usuario siempre proviene de **ejecutar** esa consulta sobre la base real. Esto separa la parte probabilística (interpretar la pregunta) de la parte verificable (calcular el resultado), y permite medir la calidad de forma objetiva.
@@ -108,7 +111,7 @@ Para cada pregunta se recuperan las tablas relevantes y ejemplos resueltos de la
 | **4** | **0.876** | **78.4 %** |
 | 6 | 0.943 | 89.2 % |
 
-Se eligió k = 4 como punto medio: k = 6 sube el recall pero alarga el prompt y añade tablas que distraen. ⚠️ PENDIENTE: recall con recuperación semántica (`--method semantic`, requiere `requirements-semantic.txt`).
+Se eligió k = 4 como punto medio: k = 6 sube el recall pero alarga el prompt y añade tablas que distraen. La evaluación con LLM confirmó que la recuperación es el cuello de botella principal: **las 6 negativas de Haiku y las 11 de Sonnet se debieron a que la tabla necesaria no estaba entre las recuperadas** (sección 2.5). La recuperación semántica (`--method semantic`) y k = 6 no se evaluaron con LLM y quedan como siguiente paso.
 
 ### Diagrama de arquitectura
 
@@ -184,13 +187,27 @@ Ninguna pregunta de dev se acerca a esos límites: las bases de BIRD son pequeñ
 
 | Modelo | Tipo | Tamaño / arquitectura | Licencia | Rol |
 |---|---|---|---|---|
-| **Claude Haiku 5.5** (`claude-haiku-5-5`) | Cerrado, API, *instruct* | No publicado | Comercial (Anthropic) | **Modelo final** (I1–I6) |
-| Claude Sonnet 5.5 (`claude-sonnet-5-5`) | Cerrado, API, *instruct* | No publicado, mayor que Haiku | Comercial | Comparación de capacidad (I7) |
+| **Claude Haiku 5.5** (`claude-haiku-5-5`) | Cerrado, API, *instruct* | No publicado | Comercial (Anthropic) | **Modelo por defecto de la app** (I6) |
+| **Claude Sonnet 5.5** (`claude-sonnet-5-5`) | Cerrado, API, *instruct* | No publicado, mayor que Haiku | Comercial | **El más preciso** (I7) |
 | Qwen2.5-Coder-7B-Instruct (Ollama) | Abierto, local, *instruct* | ≈ 7.6 B parámetros, denso | Apache 2.0 | Opción sin costo y sin enviar datos fuera (I8) |
 
-**Justificación:** se usan solo modelos *instruct*, porque el sistema depende de seguir un formato JSON y reglas de seguridad, y un modelo base no lo hace de forma confiable. Haiku es el más pequeño y barato de la familia Claude, con latencia baja para una demostración en vivo, y su tarea (generar SQL sobre un esquema dado) está bien acotada. Sonnet sirve para medir cuánto se gana con un modelo más grande frente a su costo. Qwen2.5-Coder es un modelo denso especializado en código que corre en una laptop y sirve de respaldo si falla internet en la feria. No se evaluaron modelos MoE.
+**Comparación medida** (dev, 102 preguntas, misma configuración para los tres; detalle en 2.4):
 
-**Costo:** el costo por solicitud se calcula con las tarifas que configura el operador en `DATOCLARO_PRICES_JSON` (USD por millón de tokens de entrada y salida); el código no adivina tarifas. Antes de cada llamada, el script de experimentos reserva el peor caso (3 llamadas × 8,000 tokens de entrada + 1,500 de salida) y se detiene al llegar al tope de 20 USD. ⚠️ PENDIENTE: costo medio observado por pregunta.
+| | Ollama · Qwen 7B | Claude Haiku 5.5 | Claude Sonnet 5.5 |
+|---|---:|---:|---:|
+| Exactitud (EX) | 19.6 % | 27.5 % | **45.1 %** |
+| Latencia mediana / p95 | **0.74 / 1.2 s** | 3.1 / 5.8 s | 3.9 / 7.4 s |
+| Costo de las 102 preguntas | **USD 0** | USD 0.05 | USD 0.80 |
+| Costo por pregunta | 0 | ≈ USD 0.0005 | ≈ USD 0.008 |
+| Costo por acierto | 0 | USD 0.002 | USD 0.017 |
+
+**Justificación:** se usan solo modelos *instruct*, porque el sistema depende de seguir un formato JSON y reglas de seguridad, y un modelo base no lo hace de forma confiable. No se evaluaron modelos MoE.
+
+- **Sonnet 5.5 es el mejor modelo**, con una diferencia significativa frente a los otros dos (McNemar p = 0.0001 frente a Haiku). Cuesta unas 17 veces más por pregunta que Haiku, pero las 102 preguntas salen en menos de un dólar. Es la opción recomendada cuando la exactitud importa más que el costo.
+- **Haiku 5.5 queda como motor por defecto de la app y de la demo en vivo:** responde en unos 3 s, cuesta una fracción de centavo por pregunta y las preguntas de demostración claras en español dieron el mismo resultado en todas las repeticiones (sección 2.6). Su exactitud en BIRD (27.5 %) se ve afectada sobre todo por pedir aclaraciones (28 veces), que en la app son útiles y en el examen automático cuentan como fallo.
+- **Qwen2.5-Coder 7B** es gratis, 4 veces más rápido y totalmente privado, pero se niega de más (35 veces). Su diferencia con Haiku no es significativa (p = 0.17). Sirve de respaldo sin internet.
+
+**Costo:** se calcula con las tarifas que configura el operador en `DATOCLARO_PRICES_JSON` (USD por millón de tokens de entrada y salida); el código no adivina tarifas. Antes de cada llamada, el script de experimentos reserva el peor caso (3 llamadas × 8,000 tokens de entrada + 1,500 de salida) y se detiene al llegar al tope de 20 USD. Costo observado: USD 0.05 (Haiku) y USD 0.80 (Sonnet) por las 102 preguntas de dev.
 
 ### Técnica de adaptación
 
@@ -243,7 +260,7 @@ No generes código Python, HTML, explicaciones numéricas ni gráficos.
 
 ### Conjunto de evaluación
 
-- **Principal:** 324 casos de BIRD Mini-Dev con SQL de referencia escrito y validado por anotadores expertos del equipo BIRD (Li et al., NeurIPS 2023), separados en **dev 102** (para iterar) y **test 222** (para el reporte final, usado una sola vez). Los 176 casos kb no se evalúan porque son la fuente de ejemplos. El grupo verificó que las 500 referencias ejecutan sin error y fijó sus *hashes*.
+- **Principal:** 324 casos de BIRD Mini-Dev con SQL de referencia escrito y validado por anotadores expertos del equipo BIRD (Li et al., NeurIPS 2023), separados en **dev 102** (31 simples, 49 moderadas, 22 difíciles; para iterar) y **test 222** (reservado para el número final, usado una sola vez). Los 176 casos kb no se evalúan porque son la fuente de ejemplos. El grupo verificó que las 500 referencias ejecutan sin error y fijó sus *hashes*.
 - **Robustez (propio, 30 casos):** construido por el grupo en español: 10 de seguridad (`DELETE`, `DROP`, `ATTACH`, `PRAGMA writable_schema`, `load_extension`, sentencias múltiples, `WITH … DELETE`, `VACUUM INTO`), 7 ambiguas (*«¿Cuál es la mejor escuela?»*), 3 fuera de dominio (*«¿Va a llover mañana?»*), 4 de entrada inválida (vacía, espacios, emoji, > 2,000 caracteres), 3 de SQL erróneo y 3 de límites de ejecución.
 - **Español (120 casos):** todas las preguntas de `california_schools` y `student_club` más una muestra fija de las demás bases. Hoy son borradores generados con IA sin revisión humana, y el evaluador **solo acepta filas con traductor y revisor declarados**, así que aún no se reportan métricas en español.
 
@@ -262,18 +279,20 @@ No generes código Python, HTML, explicaciones numéricas ni gráficos.
 
 Se eligió EX en vez de comparar el texto del SQL porque dos consultas distintas pueden ser igual de correctas. Así, la métrica evalúa lo que le importa al usuario: el número.
 
+**Condición de evaluación sin pistas.** No se le pasa al modelo el campo `evidence` de BIRD (por ejemplo, *«outpatient refers to Admission = '-'»*). Así se parece a un usuario real, pero el examen es más difícil que el modo estándar de BIRD y **las cifras no son comparables con la tabla oficial de BIRD**.
+
+**Qué cuenta como fallo.** Cualquier caso que no sea acierto: SQL que ejecuta pero devuelve otras filas, negativa (`refused`), pedido de aclaración (en el examen nadie responde) o error (SQL inválido, timeout, JSON mal formado, contexto demasiado grande).
+
 ### Baseline B0 (sin LLM)
 
 B0 busca en kb la pregunta más parecida de la misma base (TF-IDF, coseno) y devuelve su SQL.
 
-| Partición | Casos válidos | EX | IC 95 % | Latencia p50 / p95 | Costo |
+| Partición | Aciertos | EX | IC 95 % | Latencia mediana / p95 | Costo |
 |---|---:|---:|---|---|---|
-| dev | 70 | **0.0 %** (0/70) | [0.0, 0.0] | 47 ms / 56 ms | 0 |
-| test | 154 | **1.3 %** (2/154) | [0.0, 3.2] | 47 ms / 55 ms | 0 |
+| dev | 0 / 102 | **0 %** | [0, 0] | 0.13 / 0.27 s | 0 |
+| test | 2 / 220 válidas | **0.9 %** | [0, 2.3] | — | 0 |
 
-En test, por dificultad: simple 2.3 %, moderate 1.3 %, challenging 0 %. **Conclusión:** reutilizar consultas similares no sirve; cada pregunta tiene filtros y literales propios. Esto justifica usar un modelo generativo.
-
-> **Nota de reproducibilidad.** Estas corridas se hicieron en una copia donde tres bases (`card_games`, `codebase_community`, `european_football_2`) estaban como punteros de Git LFS sin descargar, así que sus casos cuentan como «referencia no válida» (cobertura 68.6 % en dev, 69.4 % en test). Con `git lfs pull` o `python tasks.py fetch-data` la cobertura es 100 %. ⚠️ PENDIENTE: reejecutar B0 con las 11 bases y actualizar esta tabla.
+**Conclusión:** reutilizar consultas similares no sirve; las particiones agrupan las preguntas casi gemelas para que no haya «trampa», y cada pregunta tiene filtros y literales propios. Esto justifica usar un modelo generativo.
 
 ### Robustez del ejecutor (sin LLM)
 
@@ -286,51 +305,127 @@ En test, por dificultad: simple 2.3 %, moderate 1.3 %, challenging 0 %. **Conclu
 | Límites de ejecución (recursión infinita → timeout, límite de filas, resultado vacío) | 3 / 3 |
 | **Total** | **15 / 16** |
 
-El caso que no pasó, `r07` (`SELECT load_extension('malicious')`), **sí queda bloqueado**, pero con estado `error` (función no disponible) en lugar de `rejected`. En ningún caso se modificó la base. Los 14 casos restantes (ambigüedad, fuera de dominio, entrada) requieren el pipeline completo: ⚠️ PENDIENTE: resultado de `scripts/predict_robustness.py` + `tasks.py robustness --predictions`.
+El caso que no pasó, `r07` (`SELECT load_extension('malicious')`), **sí queda bloqueado**, pero con estado `error` (función no disponible) en lugar de `rejected`. En ningún caso se modificó la base. Los 14 casos restantes (ambigüedad, fuera de dominio, entrada) requieren el pipeline completo con LLM y no se corrieron en esta entrega (`scripts/predict_robustness.py`).
 
-### Resultados del sistema con LLM
+### Resultados del sistema con LLM (dev, 102 preguntas)
 
-⚠️ PENDIENTE: completar con `python scripts/experiments.py --configs I1 I2 I3 I4 I5 I6 I7 I8` (partición dev) y la corrida final de test con I6. Ver la tabla de iteraciones en 2.5.
+Configuración completa del sistema para los tres modelos: recuperación léxica top-4 con puentes, 3 ejemplos kb, salida JSON, una reparación y aclaraciones permitidas (equivale a I6). Una corrida por modelo.
+
+| | **TF-IDF** (B0) | **Ollama · Qwen 7B** | **Claude Haiku 5.5** | **Claude Sonnet 5.5** |
+|---|---:|---:|---:|---:|
+| **Aciertos** | 0 / 102 | 20 / 102 | 28 / 102 | **46 / 102** |
+| **Exactitud (EX)** | **0 %** | **19.6 %** | **27.5 %** | **45.1 %** |
+| IC 95 % | 0 – 0 % | 12.7 – 27.5 % | 18.6 – 35.3 % | 35.3 – 53.9 % |
+| Simples (31) | 0 | 12 | 12 | **20** |
+| Moderadas (49) | 0 | 7 | 13 | **19** |
+| Difíciles (22) | 0 | 1 | 3 | **7** |
+| SQL ejecutados | 102 | 57 | 68 | **80** |
+| Aciertos sobre lo ejecutado | 0 % | 35 % | 41 % | **58 %** |
+| Pidió aclaración | — | 2 | **28** | 9 |
+| Se negó | — | **35** | 6 | 11 |
+| Errores | — | 8 | 0 | 2 |
+| Latencia mediana / p95 | 0.13 / 0.27 s | **0.74 / 1.2 s** | 3.1 / 5.8 s | 3.9 / 7.4 s |
+| Costo de las 102 preguntas | USD 0 | USD 0 | USD 0.05 | USD 0.80 |
+| Costo por acierto | — | USD 0 | USD 0.002 | USD 0.017 |
+
+**¿Las diferencias son reales? (McNemar pareado sobre las mismas preguntas)**
+
+| Comparación | Solo acertó el 1.º | Solo acertó el 2.º | p | ¿Diferencia significativa? |
+|---|---:|---:|---:|---|
+| Sonnet frente a Haiku | 20 | 2 | **0.0001** | Sí |
+| Sonnet frente a Ollama | 32 | 6 | **< 0.0001** | Sí |
+| Haiku frente a Ollama | 17 | 9 | 0.17 | No |
+
+**Aciertos por base de datos**
+
+| Base | Preguntas | Ollama | Haiku | Sonnet |
+|---|---:|---:|---:|---:|
+| student_club | 9 | 3 | 5 | **7** |
+| california_schools | 6 | 2 | 4 | **5** |
+| codebase_community | 10 | 2 | 5 | **6** |
+| superhero | 11 | 4 | 4 | **6** |
+| toxicology | 8 | 1 | **4** | **4** |
+| debit_card_specializing | 7 | 0 | 1 | **4** |
+| european_football_2 | 11 | 1 | 0 | **3** |
+| financial | 6 | 2 | 0 | **3** |
+| formula_1 | 14 | 2 | **3** | **3** |
+| thrombosis_prediction | 9 | **3** | 1 | **3** |
+| card_games | 11 | 0 | 1 | **2** |
+
+Sonnet gana o empata en las 11 bases. Las bases educativas, que son el foco del producto (`student_club`, `california_schools`), son también donde mejor rinden los tres modelos: Sonnet acierta 12 de 15.
+
+**Partición test:** no se corrió con LLM en esta entrega; se reserva para el número final una vez cerrados los ajustes, para no ajustar el sistema mirando el examen.
 
 ---
 
 ## 2.5 Resultados de iteraciones
 
-Cada iteración cambia **una sola cosa** respecto a la anterior (`app/config.py:experiment`) y se evalúa sobre las mismas 102 preguntas de dev. Cada corrida guarda predicciones, puntajes, resumen y un manifiesto con el *commit* y los *hashes* del código y los datos en `artifacts/runs/<id>/`.
+Cada corrida guarda predicciones, puntajes, resumen y un manifiesto con el *commit* y los *hashes* del código y los datos en `artifacts/runs/<id>/`. El repositorio define una escalera de ablaciones I1→I8 (`app/config.py:experiment`), en la que cada paso cambia una sola cosa. En esta entrega se corrieron el baseline y la configuración completa con los tres modelos:
 
-| ID | Cambio respecto a la anterior | EX dev | IC 95 % | Ejecutables | Latencia p50 | Tokens entrada / pregunta | USD / pregunta |
-|---|---|---:|---|---:|---:|---:|---:|
-| B0 | Sin LLM: SQL de la pregunta kb más similar | 0.0 % | [0, 0] | 100 %* | 0.05 s | 0 | 0 |
-| I1 | Haiku, esquema completo, salida SQL libre, sin ejemplos | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| I2 | + salida JSON estructurada | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| I3 | + recuperación top-4 tablas con puentes FK (en vez de esquema completo) | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| I4 | + 3 ejemplos *few-shot* de kb | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| I5 | + 1 reparación con el error de SQLite | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| **I6** | + permitir aclaración ante ambigüedad (**configuración final**) | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| I7 | I6 con Claude Sonnet 5.5 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| I8 | I6 con Qwen2.5-Coder-7B local (Ollama) | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | 0 |
+| ID | Cambio | EX dev | IC 95 % | Ejecutables | Latencia mediana | USD / 102 preguntas | Estado |
+|---|---|---:|---|---:|---:|---:|---|
+| B0 | Sin LLM: SQL de la pregunta kb más similar | 0 % | [0, 0] | 102 | 0.13 s | 0 | Corrida |
+| I1–I5 | Ablaciones sobre Haiku: esquema completo, SQL libre, sin ejemplos, sin reparación, sin aclaraciones | — | — | — | — | — | **No corridas** |
+| I6 (descartada) | Haiku, configuración completa; Kaspersky bloqueó 11 conexiones a la API | 22.5 % | — | — | — | — | Se repitió con una exclusión para `api.anthropic.com` |
+| **I6** | Haiku, configuración completa | **27.5 %** | 18.6–35.3 % | 68 | 3.1 s | 0.05 | Corrida |
+| **I7** | I6 con Claude Sonnet 5.5 | **45.1 %** | 35.3–53.9 % | 80 | 3.9 s | 0.80 | Corrida |
+| I8 | I6 con Qwen2.5-Coder-7B local (Ollama) | 19.6 % | 12.7–27.5 % | 57 | 0.74 s | 0 | Corrida |
 
-\* Sobre los casos con referencia válida: el SQL copiado ejecuta, pero responde otra pregunta.
+Las ablaciones I1–I5 (en especial I5, sin aclaraciones, para medir cuánto le cuestan a Haiku sus 28 aclaraciones) y las variantes top-k = 6 y recuperación semántica quedan como siguiente paso (`python scripts/experiments.py --configs I5 I6`).
 
-Ablaciones adicionales sobre I6: top-k ∈ {2, 4, 6} (`--top-k`), recuperación léxica frente a semántica (`--retrieval semantic`). ⚠️ PENDIENTE.
+### Análisis de fallas
 
-### Fallas observadas y cómo se abordaron
+**1. Negativas por recuperación incompleta (Haiku 6, Sonnet 11).** Se revisó cada negativa de Haiku y Sonnet contra el SQL de referencia, y **en todas era cierto** que faltaba la tabla necesaria entre las recuperadas. Ejemplo:
 
-⚠️ REVISAR: las filas de `temperature` y carpetas sincronizadas están documentadas en el historial de *commits*; las demás se dedujeron de las defensas que tiene el código. Confirmen que coinciden con lo que vieron al iterar.
+> *«List the long name of teams with above-average build-up play passing in 2012.»*
+> Sonnet: *«No puedo responder con el esquema proporcionado: la pregunta necesita el atributo de pase en la construcción de juego (buildUpPlayPassing)…»*
 
-| Falla | Ejemplo / síntoma | Solución en el código |
-|---|---|---|
-| **Formato incorrecto** | El modelo envuelve el SQL en bloques ```` ```sql ```` o agrega explicación | Salida JSON obligatoria; el *parser* elimina cercas Markdown; un reintento con *«La respuesta anterior no respetó el formato»* (`app/pipeline.py`) |
-| **Columnas o tablas alucinadas** | `no such column: enrollment` | Regla «usa exclusivamente nombres del esquema» + reparación única con el error real de SQLite |
-| **Tabla de unión faltante** | Se recuperan `member` y `major` pero el *join* necesita la tabla intermedia | Puentes por camino más corto en el grafo de claves foráneas (`bridge_tables`) |
-| **Vocabulario español vs. esquema inglés** | «matrícula» no coincide léxicamente con `Enrollment` | Diccionario de alias español→inglés en la recuperación léxica; opción semántica multilingüe (e5) |
-| **`LIMIT` innecesario** | El modelo agrega `LIMIT 10` y trunca un resultado que debía ser completo | Regla explícita en el prompt |
-| **Fechas relativas no reproducibles** | `date('now')` cambia el resultado según el día | Fecha de referencia en el prompt y `current_date` fijado en el ejecutor |
-| **Aclaraciones excesivas en el benchmark** | El modelo pide aclaración ante preguntas que BIRD considera definidas | Condición `clarify` separada (I5 frente a I6) para medir su efecto; en la app se permite aclarar |
-| **`temperature` rechazada por Haiku 5.5** | Error 400 de la API al enviar `temperature=0` | Se quitó el parámetro (commit `46fb5a3`) |
-| **Timeouts de SQLite en carpetas sincronizadas** | Lecturas lentas desde iCloud/OneDrive agotaban los 5 s | Copia verificada por *hash* a un directorio temporal local (`app/runtime.py`) |
+La columna está en `Team_Attributes`, que el buscador léxico no seleccionó porque *«build-up play»* no comparte palabras con el nombre de la tabla. Los modelos **dijeron la verdad en vez de inventar**, como pide el prompt. **Abordaje propuesto:** subir top-k a 6 (recall de tablas 0.943 frente a 0.876) o usar la recuperación semántica.
 
-⚠️ PENDIENTE: agregar 2–3 ejemplos reales de `artifacts/runs/<id>/predictions.jsonl` (pregunta, SQL generado, SQL de referencia, por qué falló).
+**2. Negativas falsas de Ollama (35).** 17 veces el modelo de 7B creyó que le pedían escribir o romper reglas ante preguntas normales de lectura:
+
+> *«What's the nationality of the customer who spent 548.4 in 2012/8/24?»*
+> Ollama: *«La solicitud no es una consulta de lectura sobre el esquema proporcionado.»*
+
+Otras 8 veces dijo que faltaba una tabla aunque recibió **exactamente las mismas tablas que Sonnet** (no fue culpa del buscador) y 10 por otros motivos. Un modelo pequeño aplica de más las reglas de seguridad del prompt y se confunde al mezclar idiomas (prompt en español, preguntas en inglés). **Abordaje propuesto:** suavizar esas reglas para Ollama, ya que la protección real está en el ejecutor de solo lectura.
+
+**3. Mala lectura del esquema (Ollama 37 SQL incorrectos).** SQL válido sobre las tablas equivocadas:
+
+```sql
+-- «What is the total amount of money spent for food?»
+-- Referencia de BIRD (Sonnet escribió exactamente esto):
+SELECT SUM(spent) FROM budget WHERE category = 'Food'
+-- Ollama:
+SELECT SUM(cost) AS total_spent FROM expense WHERE expense_description LIKE '%food%'
+```
+
+**4. Aclaraciones de Haiku (28).** Muchas preguntas dependen de las pistas que no se le pasan al modelo, por ejemplo *«¿Qué rango de bilirrubina (T-BIL) consideras normal?»* o *«¿Qué valor de Thrombosis corresponde a "más grave"?»*. En la app, preguntar es lo correcto; en el examen automático cuenta como fallo. Sonnet, en cambio, hace una suposición razonable (solo 9 aclaraciones).
+
+**5. Límites técnicos de Ollama (8 errores).** 4 por contexto mayor a la cota de 6,500 bytes (por eso falla en `european_football_2`, la base con 199 columnas) y 4 por JSON mal formado incluso tras el reintento. **Abordaje propuesto:** subir la cota a ~25,000 bytes, ya que el modelo acepta 8,192 tokens.
+
+**6. Errores del propio solucionario de BIRD.** Algunos «fallos» son errores de la referencia:
+
+> *«What is the ratio of **outpatient to inpatient** followed up treatment among all the 'SLE' diagnosed patient?»* (pista: inpatient = `Admission = '+'`, outpatient = `Admission = '-'`)
+
+```sql
+-- Referencia de BIRD: '+' / '-'  → inpatient / outpatient (al revés de lo que se pide)
+SELECT SUM(CASE WHEN Admission = '+' THEN 1.0 ELSE 0 END) / SUM(CASE WHEN Admission = '-' THEN 1 ELSE 0 END) FROM Patient WHERE Diagnosis = 'SLE'
+-- Sonnet: '-' / '+'  → outpatient / inpatient (lo que la pregunta pide)
+SELECT CAST(SUM(CASE WHEN Admission = '-' THEN 1 ELSE 0 END) AS REAL) / SUM(CASE WHEN Admission = '+' THEN 1 ELSE 0 END) FROM Patient WHERE Diagnosis = 'SLE'
+```
+
+Sonnet tenía razón, pero cuenta como fallo. **La exactitud real de cada modelo es algo mayor que la medida.**
+
+### Problemas de ingeniería resueltos durante el desarrollo
+
+| Problema | Solución |
+|---|---|
+| `temperature` rechazada por Haiku 5.5 (error de la API) | Se quitó el parámetro (commit `46fb5a3`) |
+| Antivirus bloqueando conexiones a la API (corrida de Haiku con 11 errores) | Exclusión para `api.anthropic.com`; la corrida se descartó y se repitió |
+| Timeouts de SQLite al leer desde carpetas sincronizadas (iCloud/OneDrive) | Copia verificada por *hash* a un directorio temporal local (`app/runtime.py`) |
+| Respuestas envueltas en Markdown o con texto extra | Salida JSON obligatoria, limpieza de cercas Markdown y un reintento de formato |
+| Fechas relativas no reproducibles (`date('now')`) | Fecha de referencia en el prompt y `current_date` fijado en el ejecutor |
+| Vocabulario español frente a esquema en inglés | Glosario español→inglés en la recuperación léxica |
 
 ---
 
@@ -367,7 +462,19 @@ Ablaciones adicionales sobre I6: top-k ∈ {2, 4, 6} (`--top-k`), recuperación 
 - **Entradas inesperadas:** vacía → aclaración; > 2,000 caracteres → límite en la caja de texto y rechazo en el servidor; base fuera del catálogo → rechazo.
 - **CSV seguro:** se neutralizan celdas que empiezan con `=`, `+`, `-` o `@` (inyección de fórmulas en Excel) y se usa BOM UTF-8 para que los acentos se vean bien en Excel.
 
-⚠️ PENDIENTE (opcional): resultados del estudio con usuarios de la feria (`scripts/user_study.py` calcula SUS y mejora de tiempo frente a hacerlo a mano, a partir de un CSV de mediciones reales).
+### Preguntas de demostración verificadas
+
+Antes de la feria se probaron preguntas en español con Haiku, repitiendo cada una y comprobando el resultado con una consulta directa a la base:
+
+| Base | Pregunta | Resultado |
+|---|---|---|
+| Fórmula 1 | ¿Cuáles son los 10 pilotos con más victorias en la historia de la Fórmula 1? Para cada uno muestra su nombre completo, su nacionalidad, el número de carreras que ganó y el número total de carreras en las que participó… | ✅ 3/3 idéntico: Michael Schumacher (alemán, 91 victorias, 308 carreras), Lewis Hamilton (británico, 60, 202) |
+| Vida universitaria | Para cada evento, ¿cuántos miembros asistieron y cuánto dinero se gastó en total…? | ✅ 3/3 idéntico: Registration (30, USD 295.12), Yearly Kickoff (30, USD 449.13) |
+| Educación | Por escuela: ¿cuál obtuvo el mejor y cuál el peor promedio del SAT en matemáticas? | ✅ 5/5: Mission San Jose High (699) y Gompers Continuation (289) |
+| Educación | ¿En qué escuela **o** condado se obtuvo el mejor y el peor resultado…? | Pidió aclaración 5/5: la pregunta es ambigua, y el sistema lo detecta |
+| Educación | Por condado, ¿cuántas escuelas tiene cada uno…? | ⚠️ Respondió con números distintos en cada intento; se excluyó de la demo |
+
+**Lección para el usuario:** las preguntas que dicen qué columnas mostrar y no ofrecen dos interpretaciones («escuela o condado») dan resultados estables. El último caso muestra por qué la app expone siempre el SQL: el muestreo no determinista de Claude puede producir consultas distintas para la misma pregunta.
 
 ---
 
@@ -375,11 +482,13 @@ Ablaciones adicionales sobre I6: top-k ∈ {2, 4, 6} (`--top-k`), recuperación 
 
 ### Limitaciones técnicas
 
-- **Alucinación semántica:** una consulta puede ejecutar sin error y aun así responder otra cosa (un filtro equivocado, un promedio en vez de una suma). La validación sintáctica no lo detecta; por eso se muestra el SQL.
+- **Alucinación semántica:** una consulta puede ejecutar sin error y aun así responder otra cosa (un filtro equivocado, un promedio en vez de una suma). Incluso con Sonnet, el 42 % de los SQL ejecutados no coincidió con la referencia. La validación sintáctica no lo detecta; por eso se muestra el SQL.
+- **Evaluación limitada:** una sola corrida por modelo (Claude no acepta `temperature=0`, así que los resultados pueden variar algunos puntos), solo 102 preguntas (intervalos de ±8–9 puntos), sin pistas `evidence` (no comparable con la tabla oficial de BIRD) y con algunos errores en el propio solucionario de BIRD.
+- **No determinismo:** la misma pregunta puede generar consultas distintas en intentos sucesivos (sección 2.6).
 - **Contaminación del benchmark:** BIRD es público y puede estar en los datos de preentrenamiento de los modelos, lo que inflaría la exactitud frente a bases privadas.
 - **Idioma:** la evaluación principal está en inglés; las 120 traducciones al español aún no tienen revisión humana. El esquema está en inglés, por lo que las preguntas en español dependen del diccionario de alias o de los embeddings multilingües.
 - **Fecha de corte y datos históricos:** las bases son instantáneas antiguas; el sistema no sabe nada posterior y no debe usarse para la situación actual.
-- **Ventana de contexto:** suficiente para BIRD; en bases con cientos de tablas, el recall de tablas con k = 4 (0.876) se volvería el cuello de botella.
+- **Recuperación y ventana de contexto:** la ventana alcanza para BIRD, pero el recall de tablas con k = 4 (0.876) ya es un cuello de botella: explica todas las negativas de Claude. En Ollama, la cota de 6,500 bytes impide responder sobre `european_football_2`.
 - **Costo y latencia:** cada pregunta puede requerir hasta 3 llamadas (formato y reparación). El modelo local evita el costo pero es más lento y menos preciso.
 - **Dialecto:** solo SQLite.
 
@@ -405,16 +514,23 @@ Ablaciones adicionales sobre I6: top-k ∈ {2, 4, 6} (`--top-k`), recuperación 
 
 ## 2.8 Conclusiones
 
-**Desempeño.** El baseline sin LLM, que reutiliza la consulta más parecida, acierta solo el **1.3 %** del conjunto de prueba (IC 95 % [0, 3.2]): en *text-to-SQL* cada pregunta necesita su propia consulta. La recuperación de esquema con k = 4 encuentra el **87.6 %** de las tablas necesarias y todas las tablas en el **78.4 %** de las preguntas, lo que acota el techo del sistema. El ejecutor bloqueó los 10 ataques de escritura o escape sin modificar datos. ⚠️ PENDIENTE: EX del sistema final (I6) en test, ganancia frente a B0 con su prueba de McNemar, y lectura de qué tan útil es esa exactitud para un usuario que verifica el SQL.
+**Desempeño.** Con la configuración completa, **Claude Sonnet 5.5 acierta el 45.1 % de las preguntas de dev** (IC 95 % 35.3–53.9 %), frente a 27.5 % de Haiku, 19.6 % de Qwen2.5-Coder 7B y 0 % del baseline que copia la consulta más parecida. La ventaja de Sonnet es estadísticamente significativa (McNemar p = 0.0001 frente a Haiku); entre Haiku y Qwen no se puede afirmar una diferencia (p = 0.17). Todo el costo de evaluar las 102 preguntas fue de USD 0.80 con Sonnet y USD 0.05 con Haiku.
+
+**Interpretación para el usuario.** Estas cifras son una cota inferior: se midieron sin las pistas de BIRD, cuentan como fallo las aclaraciones y negativas honestas, e incluyen errores del propio solucionario. Aun así, una exactitud de 45 % significa que **el producto no debe usarse sin revisar el SQL**: por eso la app muestra la consulta, las tablas usadas y un resultado verificable, en vez de una cifra suelta. En las bases educativas, que son el foco del producto, Sonnet acertó 12 de 15 preguntas. Los fallos se concentran en la **recuperación del esquema** (todas las negativas de Claude) y, en el modelo local, en el exceso de cautela. El ejecutor bloqueó los 10 ataques de escritura o escape sin modificar datos.
 
 **Aprendizajes técnicos y metodológicos.**
 - **Separar lo probabilístico de lo verificable:** el LLM propone y la base calcula. Esto elimina los números inventados y vuelve medible la calidad.
 - **La seguridad debe estar fuera del modelo:** el prompt reduce intentos, pero la garantía la dan el modo solo lectura, el autorizador y el aislamiento del proceso.
 - **Particiones con grupos y *hashes* desde el inicio** evitaron fugas entre ejemplos *few-shot* y evaluación, y permitieron comparar iteraciones de forma justa (mismo conjunto, McNemar pareado).
-- **Cambiar una variable por iteración** (I1→I6) permite atribuir cada mejora a una decisión concreta.
+- **Comparar sobre las mismas preguntas** con una prueba pareada mostró que una diferencia de 8 puntos (Haiku frente a Qwen) puede no ser significativa con 102 casos.
+- **Revisar los fallos a mano cambia la conclusión:** varias negativas «fallidas» eran respuestas honestas por culpa del buscador, y algunas respuestas «incorrectas» eran correctas frente a un solucionario equivocado.
+- **El modelo grande no siempre es el adecuado:** Sonnet es el más preciso, pero Haiku es suficiente y más barato para una demo con preguntas bien formuladas.
 - **Detalles de API importan:** un parámetro deprecado (`temperature` en Haiku 5.5) rompía todas las llamadas.
 
 **Trabajo futuro.**
+- Mejorar la recuperación (top-k = 6 o semántica) y correr las ablaciones I1–I5, en especial I5 (sin aclaraciones).
+- Suavizar las reglas de seguridad del prompt para Ollama y subir su cota de contexto a ~25,000 bytes.
+- Varias corridas por modelo para reportar la variación, y la corrida final única en test (222 preguntas).
 - Revisión humana de las 120 traducciones para reportar exactitud en español, que es el caso de uso real.
 - Recuperación híbrida (léxica + semántica) y uso de las descripciones de columnas de BIRD como contexto adicional.
 - Autoconsistencia: generar varias consultas y votar por el resultado más frecuente.
@@ -450,14 +566,31 @@ python tasks.py check-references        # las 500 referencias ejecutan
 python tasks.py eval --baseline --split test       # B0
 python scripts/evaluate_retrieval.py --method lexical
 python tasks.py robustness              # ejecutor
-# Con ANTHROPIC_API_KEY y DATOCLARO_PRICES_JSON en .env:
-python scripts/experiments.py --configs I1 I2 I3 I4 I5 I6 I7 --budget-usd 20
-python tasks.py compare artifacts/runs/<B0> artifacts/runs/<I6>
+# Modelos (con ANTHROPIC_API_KEY en .env; Ollama corriendo para Qwen):
+DATOCLARO_PROVIDER=anthropic DATOCLARO_MODEL=claude-haiku-5-5 python tasks.py eval --predictor app.pipeline:predict --split dev
+DATOCLARO_PROVIDER=anthropic DATOCLARO_MODEL=claude-sonnet-5-5 python tasks.py eval --predictor app.pipeline:predict --split dev
+DATOCLARO_PROVIDER=ollama DATOCLARO_MODEL=qwen2.5-coder:7b-instruct python tasks.py eval --predictor app.pipeline:predict --split dev
+# Ablaciones con tope de gasto (requiere DATOCLARO_PRICES_JSON):
+python scripts/experiments.py --configs I5 I6 --budget-usd 20
+python tasks.py compare artifacts/runs/<corrida_A> artifacts/runs/<corrida_B>
 python tasks.py figures artifacts/runs/<id1> artifacts/runs/<id2> ...
 python tasks.py test
 ```
 
 Las claves de API **no** están en el repositorio: se leen de `.env` (excluido en `.gitignore`; la plantilla es `.env.example`).
+
+**Corridas usadas en este informe** (`artifacts/runs/`, no versionado; resumen completo en `RESULTADOS_EVALUACION.md`):
+
+| Sistema | Partición | Carpeta |
+|---|---|---|
+| TF-IDF (B0) | dev | `20261103T003923Z-33bc673d` |
+| TF-IDF (B0) | test | `20261103T003333Z-17c146c6` |
+| Ollama · Qwen 7B | dev | `20261103T004640Z-f0332a96` |
+| Claude Haiku 5.5 | dev | `20261103T010149Z-bc5497ce` |
+| Claude Haiku 5.5 (descartada) | dev | `20261103T004404Z-13081b52` |
+| Claude Sonnet 5.5 | dev | `20261103T010316Z-ccccdec1` |
+
+Las corridas con LLM se hicieron con dos cambios aún sin *commit* (el glosario de `app/retrieval.py` y `max_tokens` en `app/config.py` y `app/llm.py`); el manifiesto de cada corrida registra la huella SHA-256 del código exacto usado.
 
 ### Referencias
 
